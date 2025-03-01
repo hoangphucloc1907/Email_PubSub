@@ -29,15 +29,14 @@ namespace EmailPubsub.Services
                 SaslPassword = _config["Kafka:SaslPassword"],
                 GroupId = "email_consumer_group",
                 AutoOffsetReset = AutoOffsetReset.Earliest,
-                // Thêm timeout để tránh treo vô hạn
-                SessionTimeoutMs = 10000, // 10 giây
-                MaxPollIntervalMs = 300000 // 5 phút
+                SessionTimeoutMs = 10000, // 10 seconds
+                MaxPollIntervalMs = 300000 // 5 minutes
             };
 
             using var consumer = new ConsumerBuilder<Ignore, string>(config).Build();
             consumer.Subscribe(_config["Kafka:Topic"]);
 
-            Console.WriteLine("Consumer đang lắng nghe...");
+            Console.WriteLine("Consumer is listening...");
 
             try
             {
@@ -45,38 +44,38 @@ namespace EmailPubsub.Services
                 {
                     try
                     {
-                        var consumeResult = consumer.Consume(TimeSpan.FromSeconds(1)); // Timeout 1 giây
+                        var consumeResult = consumer.Consume(TimeSpan.FromSeconds(1)); // Use stoppingToken for cancellation
                         if (consumeResult?.Message != null)
                         {
                             string message = consumeResult.Message.Value;
-                            Console.WriteLine($"Nhận được thông điệp: {message}");
+                            Console.WriteLine($"Received message: {message}");
 
                             var emailData = JsonSerializer.Deserialize<Email>(message);
                             if (emailData != null)
                             {
-                                // Gửi email không chặn luồng chính
-                                await Task.Run(() => SendEmail(emailData.To, emailData.Subject, emailData.Body), stoppingToken);
+                                // Send email asynchronously
+                                _ = SendEmailAsync(emailData.To, emailData.Subject, emailData.Body, stoppingToken);
                             }
                         }
                         else
                         {
-                            // Nghỉ ngắn để tránh CPU usage cao
+                            // Short delay to avoid high CPU usage
                             await Task.Delay(100, stoppingToken);
                         }
                     }
                     catch (ConsumeException ex)
                     {
-                        Console.WriteLine($"Lỗi Kafka: {ex.Message}");
+                        Console.WriteLine($"Kafka error: {ex.Message}");
                     }
                 }
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine("Dịch vụ bị hủy.");
+                Console.WriteLine("Service canceled.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Lỗi tổng quát: {ex.Message}");
+                Console.WriteLine($"General error: {ex.Message}");
             }
             finally
             {
@@ -84,7 +83,7 @@ namespace EmailPubsub.Services
             }
         }
 
-        private void SendEmail(string to, string subject, string body)
+        private async Task SendEmailAsync(string to, string subject, string body, CancellationToken cancellationToken)
         {
             using var smtpClient = new SmtpClient(_config["Smtp:Host"])
             {
@@ -104,12 +103,12 @@ namespace EmailPubsub.Services
 
             try
             {
-                smtpClient.Send(mailMessage); // Có thể thay bằng SendAsync để bất đồng bộ
-                Console.WriteLine($"Đã gửi email tới {to}");
+                await smtpClient.SendMailAsync(mailMessage, cancellationToken); 
+                Console.WriteLine($"Email sent to {to}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Lỗi gửi email: {ex.Message}");
+                Console.WriteLine($"Email sending error: {ex.Message}");
             }
         }
     }

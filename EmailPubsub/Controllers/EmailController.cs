@@ -19,11 +19,11 @@ namespace EmailPubsub.Controllers
         [HttpPost("send")]
         public async Task<IActionResult> SendEmail([FromBody] Email emailRequest)
         {
-            if (!ModelState.IsValid)
+            if (emailRequest == null || !ModelState.IsValid)
                 return BadRequest(ModelState);
 
             await _pubService.SendEmailMessage(emailRequest);
-            return Ok("Email đã được gửi vào hàng đợi.");
+            return Ok("Email has been queued.");
         }
     }
 }
